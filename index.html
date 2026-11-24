@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#0b1220">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<!-- build 2026-11-24T01:01:35.831Z -->
+<!-- build 2026-11-24T01:08:29.213Z -->
 <title>棒球紀錄 · 逐球計分</title>
 <style>
 :root{
@@ -1191,6 +1191,11 @@ ${sheets.map((s, i) => `<Relationship Id="rId${i + 1}" Type="http://schemas.open
     save();
     return true;
   }
+  /* 自動保送／三振會先記球再記打席，合併成一步復原 */
+  function mergeLastSnapshot() {
+    const g = G();
+    if (g && g.history && g.history.length) g.history.pop();
+  }
 
   function ensureInning(n) {
     const g = G();
@@ -1770,7 +1775,7 @@ ${sheets.map((s, i) => `<Relationship Id="rId${i + 1}" Type="http://schemas.open
     defenseOf, bench, substitute, swapPositions, pinchHitter, pinchRunner,
     ball, strike, foul, resetCount,
     applyPlay, autoDest, runnerAction,
-    changePitcher, finish, undo,
+    changePitcher, finish, undo, mergeLastSnapshot,
     batting, pitching, lineScore,
     addRun
   };
@@ -2598,6 +2603,7 @@ ${sheets.map((s, i) => `<Relationship Id="rId${i + 1}" Type="http://schemas.open
       const r = S.ball();
       if (r && r.auto === 'walk') {
         S.applyPlay({ kind: 'walk', code: '四壞', dest: S.autoDest({ kind: 'walk' }) });
+        S.mergeLastSnapshot();
         toast('四壞球保送');
         after(); return;
       }
@@ -2610,6 +2616,7 @@ ${sheets.map((s, i) => `<Relationship Id="rId${i + 1}" Type="http://schemas.open
       if (r && r.auto === 'strikeout') {
         // 第 3 顆好球已由 strike() 計入球數，不再重複加
         S.applyPlay({ kind: 'out', code: '三振', dest: S.autoDest({ kind: 'out', code: '三振' }), pitch: false });
+        S.mergeLastSnapshot();
         toast('三振出局');
         after(); return;
       }
