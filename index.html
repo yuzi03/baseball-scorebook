@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#0b1220">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<!-- build 2026-11-23T15:07:48.545Z -->
+<!-- build 2026-11-24T01:01:35.831Z -->
 <title>棒球紀錄 · 逐球計分</title>
 <style>
 :root{
@@ -141,8 +141,8 @@ input,select{font-family:inherit;font-size:16px}
 .battercard .who{display:flex;flex-direction:column;min-width:0}
 .battercard .who b{font-size:17px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .battercard .who span{font-size:12px;color:var(--mute)}
-.countctl{display:flex;gap:8px;margin-left:auto}
-.countctl button{width:52px;height:46px;border-radius:12px;border:1px solid var(--line);background:#0e1a2c;font-weight:800;font-size:13px;line-height:1.1}
+.countctl{display:flex;gap:6px;margin-left:auto}
+.countctl button{width:48px;height:46px;border-radius:12px;border:1px solid var(--line);background:#0e1a2c;font-weight:800;font-size:12.5px;line-height:1.1}
 
 .actions{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
 .act{
@@ -1224,6 +1224,17 @@ ${sheets.map((s, i) => `<Relationship Id="rId${i + 1}" Type="http://schemas.open
     if (g.strikes >= 3) { save(); return { auto: 'strikeout' }; }
     save(); return null;
   }
+  /* 界外球：未滿 2 好球記 1 好球；2 好球後只加球數，打者繼續 */
+  function foul() {
+    const g = G();
+    if (g.finished) return null;
+    snapshot();
+    PITCH(pitcherId());
+    const addedStrike = g.strikes < 2;
+    if (addedStrike) g.strikes++;
+    save();
+    return { addedStrike };
+  }
   function resetCount() {
     const g = G(); snapshot(); g.balls = 0; g.strikes = 0; save();
   }
@@ -1254,6 +1265,10 @@ ${sheets.map((s, i) => `<Relationship Id="rId${i + 1}" Type="http://schemas.open
     const team = battingTeam();
     const bid = batterId();
     const pid = pitcherId();
+    const isHbp = opt.kind === 'hbp' || (opt.kind === 'walk' && opt.code === '觸身球');
+    // 安打、出局、觸身球：最後那一球也要記在投手身上
+    // （三振若已由「好球」鍵計入第 3 球，會用 pitch:false 避免重複）
+    if ((opt.kind === 'hit' || opt.kind === 'out' || isHbp) && opt.pitch !== false) PITCH(pid);
     const dest = opt.dest || autoDest(opt);
     const rec = {
       id: 'pa' + (g.pa.length + 1),
@@ -1753,7 +1768,7 @@ ${sheets.map((s, i) => `<Relationship Id="rId${i + 1}" Type="http://schemas.open
     battingTeam, fieldTeam, offenseName, defenseName,
     lineupOf, batterId, pitcherId, batterOrder,
     defenseOf, bench, substitute, swapPositions, pinchHitter, pinchRunner,
-    ball, strike, resetCount,
+    ball, strike, foul, resetCount,
     applyPlay, autoDest, runnerAction,
     changePitcher, finish, undo,
     batting, pitching, lineScore,
@@ -1844,7 +1859,7 @@ ${sheets.map((s, i) => `<Relationship Id="rId${i + 1}" Type="http://schemas.open
         <b style="color:var(--gold)">1. 帳號</b>　第一次使用先建立帳號；每個人（或每支球隊）可以有各自的隊伍與比賽紀錄，可設 PIN。首頁「帳號」可切換、改名、登出。<br>
         <b style="color:var(--gold)">2. 首頁</b>　點客隊／主隊選擇要對戰的隊伍；「隊伍管理」可建立多支球隊。<br>
         <b style="color:var(--gold)">3. 排先發</b>　點空格再點球員排出 9 棒，選先發投手後開始比賽。<br>
-        <b style="color:var(--gold)">4. 逐球記錄</b>　右側「好球／壞球」累計球數；4 壞自動保送、3 好球自動三振。<br>
+        <b style="color:var(--gold)">4. 逐球記錄</b>　右側「壞球／界外／好球」累計球數；4 壞自動保送、3 好球自動三振。界外在 2 好球後只加球數、不換打者；安打、出局、觸身球也會記投手 1 球。<br>
         <b style="color:var(--gold)">5. 下方三大鍵</b>　<b>安打</b>→選壘打數→設定跑者推進；<b>保送</b>→四壞／故四／觸身；<b>出局</b>→選方式後點守位組成傳球（例 6-4-3）。<br>
         <b style="color:var(--gold)">6. 壘包</b>　點壘包上的跑者 → 盜壘、盜壘刺、推進、回本壘、牽制。<br>
         <b style="color:var(--gold)">7. 選手</b>　守備異動（換人、互換守位）、代打、代跑；「換投」單獨換投手。所有異動都可復原。<br>
@@ -2532,8 +2547,9 @@ ${sheets.map((s, i) => `<Relationship Id="rId${i + 1}" Type="http://schemas.open
           <span>${ordText(S.batterOrder())} · ${esc(bp.pos || '')} · 今日 ${tl.h}-${tl.ab}</span>
         </div>
         <div class="countctl">
-          <button data-p="ball">壞球<small style="font-size:10px;color:var(--mute)">+1</small></button>
-          <button data-p="strike">好球<small style="font-size:10px;color:var(--mute)">+1</small></button>
+          <button data-p="ball" title="壞球：球數 +1">壞球<small style="font-size:10px;color:var(--mute)">+1</small></button>
+          <button data-p="foul" title="界外：未滿 2 好球記 1 好球；2 好球後只加球數">界外<small style="font-size:10px;color:var(--mute)">+1</small></button>
+          <button data-p="strike" title="好球：好球數 +1">好球<small style="font-size:10px;color:var(--mute)">+1</small></button>
         </div>
       </div>
 
@@ -2585,10 +2601,15 @@ ${sheets.map((s, i) => `<Relationship Id="rId${i + 1}" Type="http://schemas.open
         toast('四壞球保送');
         after(); return;
       }
+    } else if (kind === 'foul') {
+      const r = S.foul();
+      if (r && !r.addedStrike) toast('界外：球數 +1，維持 2 好球');
+      render(); return;
     } else {
       const r = S.strike();
       if (r && r.auto === 'strikeout') {
-        S.applyPlay({ kind: 'out', code: '三振', dest: S.autoDest({ kind: 'out', code: '三振' }) });
+        // 第 3 顆好球已由 strike() 計入球數，不再重複加
+        S.applyPlay({ kind: 'out', code: '三振', dest: S.autoDest({ kind: 'out', code: '三振' }), pitch: false });
         toast('三振出局');
         after(); return;
       }
